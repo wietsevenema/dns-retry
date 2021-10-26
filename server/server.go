@@ -1,11 +1,11 @@
 package server
 
 import (
-	"log"
 	"net"
 	"sync"
 
 	"github.com/miekg/dns"
+	"github.com/rs/zerolog/log"
 )
 
 type server struct {
@@ -42,14 +42,14 @@ func (s *server) Run() error {
 	go func() {
 		defer s.group.Done()
 		if err := dns.ListenAndServe(s.config.BindAddr, "tcp", mux); err != nil {
-			log.Fatalf("%s", err)
+			log.Fatal().Err(err)
 		}
 	}()
 	s.group.Add(1)
 	go func() {
 		defer s.group.Done()
 		if err := dns.ListenAndServe(s.config.BindAddr, "udp", mux); err != nil {
-			log.Fatalf("%s", err)
+			log.Fatal().Err(err)
 		}
 	}()
 
@@ -61,18 +61,34 @@ func (s *server) ServeDNS(w dns.ResponseWriter, req *dns.Msg) {
 
 	tcp := isTCP(w)
 
+	log.Debug().
+		Bool("tcp", tcp).
+		Interface("questions", req.Question).
+		Msg("Starting request")
+
 	var (
 		resp *dns.Msg
 		err  error
 	)
 	for _, nameserver := range s.config.Nameservers {
+		log.Debug().
+			Str("nameserver", nameserver).
+			Msg("Sending request")
+
 		resp, err = s.queryWithRetry(nameserver, tcp, req)
 		if err != nil || resp.Rcode == dns.RcodeNameError {
+			log.Debug().Err(err).Int("Rcode", resp.Rcode).Str("nameserver", nameserver).Msg("Request failed")
 			// Try next nameserver on error or non-existent domain
 			continue
 		}
 		break
 	}
+	log.Debug().
+		Err(err).
+		Int("Rcode", resp.Rcode).
+		Interface("question", req.Question).
+		Interface("answers", req.Answer).
+		Msg("Final result")
 
 	if err == nil {
 		resp.Compress = true

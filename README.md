@@ -13,6 +13,11 @@ go run main.go -listen localhost:5300
 dig @localhost -p 5300 google.com
 ```
 
+## All options
+```
+go run main.go -help
+```
+
 ## Credits
 - https://github.com/skynetservices/skydns
 - https://github.com/miekg/dns
